@@ -1,0 +1,52 @@
+services:
+  mediamtx:
+    build: .
+    container_name: mediamtx
+    ports:
+      - "${MEDIAMTX_RTSP_PORT}:8554"     # RTSP input
+      - "${MEDIAMTX_RTMP_PORT}:1935"     # RTMP server
+      - "${MEDIAMTX_HTTP_STATS_PORT}:8888"     # HTTP (stats UI)
+      - "8889:8889"     # WebRTC HTTP
+      - "${MEDIAMTX_HTTP_API_PORT}:9997"     # HTTP API
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+    environment:
+      - TZ=UTC
+    networks:
+      - rtsp-network
+
+  rtsp-api:
+    build: ./rtsp-api
+    container_name: rtsp-api
+    user: root  # Run as root to access Docker socket
+    ports:
+      - "${RTSP_API_PORT}:3002"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - mediamtx
+    env_file:
+      - ./rtsp-api/.env
+    networks:
+      - rtsp-network
+
+  rtsp-ui:
+    build:
+      context: ./rtsp-ui
+      dockerfile: Dockerfile
+      target: production
+    container_name: rtsp-ui
+    ports:
+      - "${RTSP_UI_PORT}:3000"
+    depends_on:
+      - rtsp-api
+    env_file:
+      - ./rtsp-ui/.env
+    networks:
+      - rtsp-network
+
+networks:
+  rtsp-network:
+    name: rtsp-network
+    driver: bridge

@@ -1,0 +1,15 @@
+logLevel: info
+rtmp: true
+rtsp: true
+api: true
+apiAddress: :9997
+authMethod: internal
+authInternalUsers:
+  - user: wrakash
+    pass: akash@1997
+    permissions:
+      - action: api
+      - action: publish
+      - action: read
+webrtcAddress: :8889
+paths: {}
