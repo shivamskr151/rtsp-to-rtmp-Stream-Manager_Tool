@@ -589,6 +589,48 @@ app.put('/api/cameras/:name', async (req, res) => {
   }
 });
 
+// Helper function to retry API calls with exponential backoff
+const retryApiCall = async (url, options, maxRetries = 3, baseDelay = 1000) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Attempting API call to ${url} (attempt ${attempt}/${maxRetries})`);
+      const response = await fetch(url, options);
+      
+      if (response.ok) {
+        return response;
+      }
+      
+      // If it's a server error (5xx), retry
+      if (response.status >= 500 && attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        console.log(`Server error ${response.status}, retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      // For client errors (4xx), don't retry
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    } catch (error) {
+      console.error(`API call attempt ${attempt} failed:`, error.message);
+      
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Check if it's a DNS/connection error that should be retried
+      if (error.code === 'EAI_AGAIN' || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        console.log(`Connection error, retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      // For other errors, don't retry
+      throw error;
+    }
+  }
+};
+
 // Get stream status and statistics
 app.get('/api/status', async (req, res) => {
   try {
@@ -598,8 +640,8 @@ app.get('/api/status', async (req, res) => {
     // Get authentication headers
     const authHeaders = getMediaMTXAuthHeaders();
     
-    // Fetch paths data from MediaMTX API
-    const pathsResponse = await fetch(`${mediamtxApiUrl}/v3/paths/list`, { headers: authHeaders });
+    // Fetch paths data from MediaMTX API with retry logic
+    const pathsResponse = await retryApiCall(`${mediamtxApiUrl}/v3/paths/list`, { headers: authHeaders });
     
     if (!pathsResponse.ok) {
       throw new Error(`Failed to fetch paths: ${pathsResponse.statusText}`);
@@ -666,7 +708,7 @@ app.get('/api/status', async (req, res) => {
     // Get RTSP sessions
     let rtspSessions = [];
     try {
-      const rtspsResponse = await fetch(`${mediamtxApiUrl}/v3/rtspsessions/list`, { headers: authHeaders });
+      const rtspsResponse = await retryApiCall(`${mediamtxApiUrl}/v3/rtspsessions/list`, { headers: authHeaders });
       if (rtspsResponse.ok) {
         const rtspsData = await rtspsResponse.json();
         rtspSessions = rtspsData.items || [];
@@ -678,7 +720,7 @@ app.get('/api/status', async (req, res) => {
     // Get RTMP sessions
     let rtmpSessions = [];
     try {
-      const rtmpsResponse = await fetch(`${mediamtxApiUrl}/v3/rtmpsessions/list`, { headers: authHeaders });
+      const rtmpsResponse = await retryApiCall(`${mediamtxApiUrl}/v3/rtmpsessions/list`, { headers: authHeaders });
       if (rtmpsResponse.ok) {
         const rtmpsData = await rtmpsResponse.json();
         rtmpSessions = rtmpsData.items || [];
@@ -762,7 +804,7 @@ app.get('/api/streams/:name/status', async (req, res) => {
     
     const authHeaders = getMediaMTXAuthHeaders();
     
-    const response = await fetch(`${mediamtxApiUrl}/v3/paths/get/${name}`, { headers: authHeaders });
+    const response = await retryApiCall(`${mediamtxApiUrl}/v3/paths/get/${name}`, { headers: authHeaders });
     
     if (!response.ok) {
       return res.status(404).json({ error: 'Stream not found' });
@@ -784,7 +826,7 @@ app.get('/api/streams/:name/processing', async (req, res) => {
     
     const authHeaders = getMediaMTXAuthHeaders();
     
-    const response = await fetch(`${mediamtxApiUrl}/v3/paths/get/${name}`, { headers: authHeaders });
+    const response = await retryApiCall(`${mediamtxApiUrl}/v3/paths/get/${name}`, { headers: authHeaders });
     
     if (!response.ok) {
       return res.status(404).json({ error: 'Stream not found' });
@@ -837,7 +879,7 @@ app.get('/api/server/info', async (req, res) => {
     
     const authHeaders = getMediaMTXAuthHeaders();
     
-    const response = await fetch(`${mediamtxApiUrl}/v3/config/global/get`, { headers: authHeaders });
+    const response = await retryApiCall(`${mediamtxApiUrl}/v3/config/global/get`, { headers: authHeaders });
     
     if (!response.ok) {
       return res.status(500).json({ error: 'Failed to get server info' });
@@ -901,7 +943,7 @@ app.get('/api/streams/:name/io', async (req, res) => {
     const authHeaders = getMediaMTXAuthHeaders();
     
     // Get path details
-    const pathResponse = await fetch(`${mediamtxApiUrl}/v3/paths/get/${name}`, { headers: authHeaders });
+    const pathResponse = await retryApiCall(`${mediamtxApiUrl}/v3/paths/get/${name}`, { headers: authHeaders });
     
     if (!pathResponse.ok) {
       return res.status(404).json({ error: 'Stream not found' });
@@ -910,7 +952,7 @@ app.get('/api/streams/:name/io', async (req, res) => {
     const pathData = await pathResponse.json();
     
     // Get RTSP sessions for this path
-    const rtspSessionsResponse = await fetch(`${mediamtxApiUrl}/v3/rtspsessions/list`, { headers: authHeaders });
+    const rtspSessionsResponse = await retryApiCall(`${mediamtxApiUrl}/v3/rtspsessions/list`, { headers: authHeaders });
     let rtspSessions = [];
     
     if (rtspSessionsResponse.ok) {
@@ -919,7 +961,7 @@ app.get('/api/streams/:name/io', async (req, res) => {
     }
     
     // Get RTMP sessions for this path (internal MediaMTX RTMP)
-    const rtmpSessionsResponse = await fetch(`${mediamtxApiUrl}/v3/rtmpsessions/list`, { headers: authHeaders });
+    const rtmpSessionsResponse = await retryApiCall(`${mediamtxApiUrl}/v3/rtmpsessions/list`, { headers: authHeaders });
     let rtmpSessions = [];
     
     if (rtmpSessionsResponse.ok) {
@@ -1161,6 +1203,59 @@ app.get('/', (req, res) => {
   res.send('RTSP API is running. See /api/cameras, /api/config, etc.');
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Function to test MediaMTX connection on startup
+const testMediaMTXConnection = async () => {
+  const maxRetries = 10;
+  const retryDelay = 5000; // 5 seconds
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Testing MediaMTX connection (attempt ${attempt}/${maxRetries})...`);
+      const authHeaders = getMediaMTXAuthHeaders();
+      const response = await fetch(`${MEDIAMTX_API_URL}/v3/config/global/get`, { 
+        headers: authHeaders,
+        timeout: 10000 // 10 second timeout
+      });
+      
+      if (response.ok) {
+        console.log('✅ MediaMTX connection successful!');
+        return true;
+      } else {
+        console.log(`❌ MediaMTX responded with status ${response.status}`);
+      }
+    } catch (error) {
+      console.log(`❌ MediaMTX connection failed (attempt ${attempt}): ${error.message}`);
+      
+      if (attempt === maxRetries) {
+        console.error('❌ Failed to connect to MediaMTX after all retries. Server will start anyway but API calls may fail.');
+        return false;
+      }
+      
+      console.log(`⏳ Waiting ${retryDelay/1000} seconds before retry...`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
+  }
+  
+  return false;
+};
+
+// Start server with MediaMTX connection test
+const startServer = async () => {
+  console.log('🚀 Starting RTSP API server...');
+  
+  // Test MediaMTX connection
+  await testMediaMTXConnection();
+  
+  // Start the server
+  app.listen(PORT, () => {
+    console.log(`✅ RTSP API server running on port ${PORT}`);
+    console.log(`📡 MediaMTX API URL: ${MEDIAMTX_API_URL}`);
+    console.log(`🌐 CORS Origin: ${CORS_ORIGIN}`);
+  });
+};
+
+// Start the server
+startServer().catch(error => {
+  console.error('❌ Failed to start server:', error);
+  process.exit(1);
 }); 
