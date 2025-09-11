@@ -6,7 +6,7 @@ services:
       - "${MEDIAMTX_RTSP_PORT}:8554"     # RTSP input
       - "${MEDIAMTX_RTMP_PORT}:1935"     # RTMP server
       - "${MEDIAMTX_HTTP_STATS_PORT}:8888"     # HTTP (stats UI)
-      - "8889:8889"     # WebRTC HTTP
+      - "8890:8889"     # WebRTC HTTP
       - "${MEDIAMTX_HTTP_API_PORT}:9997"     # HTTP API
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
@@ -54,5 +54,4 @@ services:
 
 networks:
   rtsp-network:
-    name: rtsp-network
-    driver: bridge
+    external: true
