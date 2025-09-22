@@ -2,6 +2,7 @@ services:
   mediamtx:
     build: .
     container_name: mediamtx
+    restart: always
     ports:
       - "${MEDIAMTX_RTSP_PORT}:8554"     # RTSP input
       - "${MEDIAMTX_RTMP_PORT}:1935"     # RTMP server
@@ -25,6 +26,7 @@ services:
     build: ./rtsp-api
     container_name: rtsp-api
     user: root  # Run as root to access Docker socket
+    restart: always
     ports:
       - "${RTSP_API_PORT}:3002"
     volumes:
@@ -43,6 +45,7 @@ services:
       dockerfile: Dockerfile
       target: production
     container_name: rtsp-ui
+    restart: always
     ports:
       - "${RTSP_UI_PORT}:3000"
     depends_on:
@@ -54,4 +57,3 @@ services:
 
 networks:
   rtsp-network:
-    external: true

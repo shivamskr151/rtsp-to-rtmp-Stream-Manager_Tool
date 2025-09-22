@@ -23,3 +23,14 @@ paths:
       -y -reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1
       -reconnect_delay_max 2 -timeout 5000000
     runOnReadyRestart: true
+
+  Demo_Bullet_Cam:
+    source: rtsp://admin:arresto2024@172.16.16.152:554/cam/realmonitor?channel=1&subtype=0
+    runOnReady: /usr/bin/ffmpeg -rtsp_transport tcp -i
+      rtsp://admin:arresto2024@172.16.16.152:554/cam/realmonitor?channel=1&subtype=0
+      -c:v libx264 -preset veryfast -crf 32 -maxrate 400k -bufsize 800k -g 30
+      -keyint_min 15 -vf scale=640:360 -r 15 -an -f flv
+      rtmp://safetycaptain.arresto.in/camera_0052/0052?username=wrakash&password=akash@1997
+      -y -reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1
+      -reconnect_delay_max 2 -timeout 5000000
+    runOnReadyRestart: true
